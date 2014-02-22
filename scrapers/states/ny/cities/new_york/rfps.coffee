@@ -3,6 +3,7 @@ request = require 'request'
 cheerio = require 'cheerio'
 async = require 'async'
 _ = require 'underscore'
+fs = require 'fs'
 require 'colors'
 
 FORM_DATA =
@@ -16,8 +17,13 @@ FORM_DATA =
 module.exports = (opts, done) ->
 
   rfps = []
-
   currentPage = 0
+
+  addListing = ($, $wrapper) ->
+    item = {}
+    item.title = $wrapper.find('h4').text()
+    item.description = $('body').text().split(item.title)[1].split('Due Date')[0]
+    rfps.push(item)
 
   getPage = (cb) ->
     currentPage += 1
@@ -31,23 +37,28 @@ module.exports = (opts, done) ->
     else
       (currentPage - 2) * 25
 
-    request.post 'http://a856-internet.nyc.gov/nycvendoronline/vendorsearch/asp/Postings.asp',
-      form: _.extend({ startPoint: startPoint}, FORM_DATA),
-    , (err, response, body) ->
-      console.log "Received page #{currentPage}".yellow
-      $ = cheerio.load body
+    # request.post 'http://a856-internet.nyc.gov/nycvendoronline/vendorsearch/asp/Postings.asp',
+    #   form: _.extend({ startPoint: startPoint}, FORM_DATA),
+    # , (err, response, body) ->
+    body = fs.readFileSync('./scrapers/states/ny/cities/new_york/html.html')
+    console.log "Received page #{currentPage}".yellow
+    $ = cheerio.load body
 
-      $('h5.Hbox-blue').each ->
-        rfps.push {
-          title: $(@).next('h4').text()
-        }
+    $('.Hbox-blue').eq(0).each (i, _) ->
+      return if $(@).text().match /Records (\d+) to/
 
-      console.log "Parsed page #{currentPage}".green
+      $newWrapper = $('<div />')
+      $(@).nextUntil('.Hbox-blue').each ->
+        $newWrapper.append $(@).clone()
+      addListing($, $newWrapper)
 
-      if $('#A1').length > 0
-        getPage(cb)
-      else
-        cb()
+    console.log "Parsed page #{currentPage}".green
+
+    # if $('#A1').length > 0
+    #   getPage(cb)
+    # else
+    #   cb()
+    cb()
 
   getPage ->
     console.log 'All done!'.green
